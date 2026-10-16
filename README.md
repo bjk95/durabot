@@ -56,12 +56,12 @@ Key files:
 
 ```sh
 cd app
-npm install
+bun install
 cp .dev.vars.example .dev.vars      # fill in the keys
-node scripts/gen-vapid.mjs          # add the three VAPID lines to .dev.vars
-npm run db:migrate                  # local D1
-npm run dev                         # http://localhost:5173
-npm test                            # 40 tests, scripted model, no network
+bun scripts/gen-vapid.mjs           # add the three VAPID lines to .dev.vars
+bun run db:migrate                  # local D1
+bun run dev                         # http://localhost:5173
+bun run test                        # 41 tests, scripted model, no network
 ```
 
 Local requests skip Cloudflare Access. Any other host is refused until Access is set up (see below).
@@ -72,16 +72,16 @@ durabot is built for one owner behind Cloudflare Access. It is not deployed by d
 
 1. **AI Gateway.** Create a gateway named `durabot` and a token for it. Put the account id in
    `GATEWAY_BASE` in `app/wrangler.jsonc` if it is not yours.
-2. **D1 and R2.** `npx wrangler d1 create durabot`, add the id to `wrangler.jsonc`, then
-   `npm run db:migrate:remote`. `npx wrangler r2 bucket create durabot-files`.
-3. **Secrets.** `npx wrangler secret put` for `OPENROUTER_API_KEY`, `COMPOSIO_API_KEY`, `CF_AIG_TOKEN`,
+2. **D1 and R2.** `bunx wrangler d1 create durabot`, add the id to `wrangler.jsonc`, then
+   `bun run db:migrate:remote`. `bunx wrangler r2 bucket create durabot-files`.
+3. **Secrets.** `bunx wrangler secret put` for `OPENROUTER_API_KEY`, `COMPOSIO_API_KEY`, `CF_AIG_TOKEN`,
    `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, and `COMPOSIO_WEBHOOK_SECRET`.
    Set a monthly credit limit on the OpenRouter key: it is the only cost limit (D13).
 4. **Access.** Create an Access application for the Worker URL with a policy for your email.
    Add a *Bypass* policy for the path `/api/webhooks/composio` (Composio cannot send a token; the route
    checks an HMAC signature instead). Set the variables `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD`.
    **Without them the deployed Worker answers 403 to every request.**
-5. `npm run deploy`.
+5. `bun run deploy`.
 6. **Composio webhook.** In the Composio project settings, set the webhook URL to
    `https://<your-worker>/api/webhooks/composio` and copy the signing secret into step 3.
 7. Open the app, set your time zone in Settings, and install it to the Home Screen to get push messages.
@@ -97,3 +97,9 @@ durabot is built for one owner behind Cloudflare Access. It is not deployed by d
 - Trigger creation and the webhook are tested with signed test events, not with a live Gmail trigger.
 - A run that was in flight when the object stopped resumes from Pi's checkpoint. This was tested with a
   hard kill of the local dev server. It was not tested on a deployed Worker with no requests in between.
+
+## Bun
+
+Bun is the package manager and script runner (`bun install`, `bun run ...`, `bunx`). The dev server,
+Vite, and the Workers runtime (workerd) still run on their own: the Cloudflare Vite plugin does not
+work under the Bun runtime (`bun --bun`), so use plain `bun run dev`.
