@@ -6,9 +6,21 @@ import { Composio } from "@composio/core";
 import { Agent, routeAgentRequest } from "agents";
 import { PiHarness } from "agents/harness/pi";
 
-const FREE_MODEL = openrouterProvider()
-  .getModels()
-  .find((m) => m.id === "nvidia/nemotron-3-super-120b-a12b:free")!;
+// D12: send OpenRouter traffic through AI Gateway by changing the base URL and adding the gateway token.
+function gatewayProvider(env: Env) {
+  const base = openrouterProvider();
+  if (!env.GATEWAY_BASE) return base;
+  return {
+    ...base,
+    getModels: () =>
+      base.getModels().map((m) => ({
+        ...m,
+        baseUrl: env.GATEWAY_BASE,
+        headers: { ...(m as any).headers, "cf-aig-authorization": `Bearer ${env.CF_AIG_TOKEN}` },
+      })),
+  } as typeof base;
+}
+const FREE_ID = "nvidia/nemotron-3-super-120b-a12b:free";
 
 const Echo = Type.Object({ text: Type.String() });
 const echo: ToolRegistration<typeof Echo> = {
@@ -58,11 +70,11 @@ export class Spike extends Agent<Env> {
   harness = new PiHarness({
     harness: ({ storage, context }) => {
       const models = createModels();
-      models.setProvider(openrouterProvider());
+      models.setProvider(gatewayProvider(this.env));
       this.registry.install({ name: "spike", sections: [], tools: [echo, fetchEmails, slow] });
       return Harness.open(storage, { models, registry: this.registry }, context);
     },
-    defaults: { model: FREE_MODEL, thinkingLevel: "off" },
+    defaults: { model: gatewayProvider(this.env).getModels().find((m) => m.id === FREE_ID)!, thinkingLevel: "off" },
   });
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -154,6 +166,8 @@ interface Env {
   AI: Ai;
   OPENROUTER_API_KEY: string;
   COMPOSIO_API_KEY: string;
+  GATEWAY_BASE: string;
+  CF_AIG_TOKEN: string;
 }
 
 export default {

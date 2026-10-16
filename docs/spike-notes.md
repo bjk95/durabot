@@ -24,11 +24,11 @@ Versions: `agents` 0.28.1, `@earendil-works/pi-durable` 1.3.0, `@earendil-works/
 - The OpenRouter provider reads `OPENROUTER_API_KEY` from `process.env`. In a Worker this needs the flags `nodejs_compat` and `nodejs_compat_populate_process_env`.
 - `defaults.model` must be a model object, not a string.
 - The Cloudflare docs show a tool result with `content`. The 1.3.0 type uses `output`. Return `{ output: [{ type: "text", text }] }`.
-- **AI Gateway (D12) is not tested.** The `createAI` helper of `agents` sends vendor models through AI Gateway. The gateway holds the key (BYOK). A Worker with the `AI` binding runs in remote mode, and remote mode needs a workers.dev subdomain on the account. The account has none yet.
+- **AI Gateway (D12):** The `createAI` helper of `agents` sends vendor models through AI Gateway. The gateway holds the key (BYOK). A Worker with the `AI` binding runs in remote mode, and remote mode needs a workers.dev subdomain on the account. The account has none yet.
 - Two ways to reach D12 remain:
   1. Use `createAI` and store the OpenRouter key on the gateway.
   2. Set the `baseUrl` of the OpenRouter provider to `https://gateway.ai.cloudflare.com/v1/<account>/<gateway>/openrouter`.
-- Decision needed before step 2. Option 2 is smaller, and it keeps the Pi OpenRouter provider. Test it first.
+- Option 2 passed. See the AI Gateway section below.
 
 ### 2. Context size
 
@@ -66,11 +66,15 @@ Versions: `agents` 0.28.1, `@earendil-works/pi-durable` 1.3.0, `@earendil-works/
 - **Caveat:** requests to the object (`/dump`) came in after the restart. A request also wakes the object. The test did not prove that the lifecycle alarm alone wakes it. Test this again after the first deploy, with no requests.
 - The first test script reported success too early, because it matched a word in the prompt text. The result above comes from the transcript.
 
-## AI Gateway attempt (D12, option 2)
+## AI Gateway (D12, option 2): pass
 
 - The subdomain `durabot.workers.dev` is registered through the API.
-- The `wrangler login` token has no AI Gateway permission. `POST /ai-gateway/gateways` gives "Authentication error". A request to `gateway.ai.cloudflare.com/.../durabot/openrouter` gives HTTP 401, with the same result for a gateway name that does not exist. The gateway is not created on first use.
-- Next: create the gateway `durabot` in the dashboard (AI, AI Gateway, Create Gateway). Then repeat the request. If the gateway has authentication on, an API token with "AI Gateway: Run" is also needed (header `cf-aig-authorization`).
+- The gateway `durabot` was created in the dashboard. The `wrangler login` token cannot create a gateway, and a first request does not create one.
+- The gateway has authentication on. A plain HTTP request needs the header `cf-aig-authorization: Bearer <gateway token>`. Without it the result is HTTP 401 (code 2009). A Worker binding needs no token.
+- Method: the Pi OpenRouter provider uses a model list where each model has a new `baseUrl` and a `cf-aig-authorization` header. The base URL is `https://gateway.ai.cloudflare.com/v1/<account>/durabot/openrouter`. See `gatewayProvider` in `spike/src/index.ts`.
+- The Pi prompt worked through the gateway. With a wrong gateway token, the prompt failed with the gateway 401. This shows that the traffic uses the gateway.
+- Decision: use this method for D12. It keeps the Pi OpenRouter provider, and the OpenRouter key stays a Worker secret.
+- Worker settings for the first deploy: secrets `OPENROUTER_API_KEY`, `COMPOSIO_API_KEY`, and `CF_AIG_TOKEN`; variable `GATEWAY_BASE`.
 
 ## Other facts
 
@@ -80,7 +84,7 @@ Versions: `agents` 0.28.1, `@earendil-works/pi-durable` 1.3.0, `@earendil-works/
 
 ## Changes to the plan
 
-1. Step 2: Wait for the result of the AI Gateway test (D12) before step 2 starts.
+1. Step 2: Use the `gatewayProvider` method for D12 (tested).
 2. Step 5: Register four Composio meta tools. Leave out the remote bash and workbench tools.
 3. Step 5: Mark `COMPOSIO_SEARCH_TOOLS` and `COMPOSIO_GET_TOOL_SCHEMAS` as `replay: "safe"`. Mark the other two as `"unsafe"`.
 4. Step 7: Test eviction recovery on the deployed Worker with no requests during the run.
