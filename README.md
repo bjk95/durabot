@@ -8,6 +8,13 @@ Pi runs the agent loop. Composio handles app sign-in and tools. durabot is the g
 The design decisions (D1 to D33) are in [docs/grill-log.md](docs/grill-log.md).
 The spike that proved the platform is in [docs/spike-notes.md](docs/spike-notes.md).
 
+## Design
+
+The interface follows the durabot Liquid Glass design system (iOS 26 style): glass for the control layer
+(top bar, tab control, composer, sheets), plain content for messages and lists, one blue accent, a floating
+sidebar on wide windows, light and dark themes, and Reduce Transparency support. The tokens and component
+styles are in `app/app/app.css`.
+
 ## What you can do
 
 - **Create a bot by chat.** Open Builder and describe the bot. Builder creates it.

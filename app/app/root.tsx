@@ -1,3 +1,4 @@
+import { SearchX, TriangleAlert } from "lucide-react";
 import { useEffect } from "react";
 import { isRouteErrorResponse, Link, Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
 
@@ -8,17 +9,12 @@ export const links: Route.LinksFunction = () => [
   { rel: "manifest", href: "/manifest.webmanifest" },
   { rel: "icon", href: "/icon.svg", type: "image/svg+xml" },
   { rel: "apple-touch-icon", href: "/icon-192.png" },
-  { rel: "preconnect", href: "https://fonts.googleapis.com" },
-  { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-  {
-    rel: "stylesheet",
-    href: "https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&display=swap",
-  },
 ];
 
 export const meta: Route.MetaFunction = () => [
   { title: "durabot" },
-  { name: "theme-color", content: "#3b4cca" },
+  { name: "theme-color", content: "#f2f2f7", media: "(prefers-color-scheme: light)" },
+  { name: "theme-color", content: "#000000", media: "(prefers-color-scheme: dark)" },
   { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
 ];
 
@@ -46,22 +42,33 @@ export default function App() {
   return <Outlet />;
 }
 
+/** Calm error screens: a symbol tile, a title, one sentence, one button. */
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  let message = "Something went wrong";
-  let details = "An unexpected error occurred.";
-  if (isRouteErrorResponse(error)) {
-    message = error.status === 404 ? "Not found" : "Error";
-    details = error.status === 404 ? "This page does not exist." : error.statusText || details;
-  } else if (error instanceof Error) {
-    details = error.message;
-  }
+  const notFound = isRouteErrorResponse(error) && error.status === 404;
+  const Icon = notFound ? SearchX : TriangleAlert;
+  const title = notFound ? "Page not found" : "Something went wrong";
+  let text = notFound ? "This page does not exist. It may have been deleted." : "Something went wrong on our side. Try again in a moment.";
+  if (!notFound && error instanceof Error && import.meta.env.DEV) text = error.message;
   return (
-    <main className="mx-auto max-w-xl p-6 pt-16">
-      <h1 className="text-xl font-semibold">{message}</h1>
-      <p className="mt-2 text-muted">{details}</p>
-      <Link to="/" className="mt-4 inline-block text-accent underline">
-        Back to bots
-      </Link>
-    </main>
+    <div className="screen">
+      <div className="center-pg">
+        <div className="empty" role="alert">
+          <span className="logo" style={{ width: 64, height: 64, borderRadius: 20 }}>
+            <Icon className="i" width={30} height={30} strokeWidth={1.8} />
+          </span>
+          <h1>{title}</h1>
+          <p>{text}</p>
+          {notFound ? (
+            <Link to="/" className="btn btn-primary" style={{ marginTop: 16 }}>
+              Go to your bots
+            </Link>
+          ) : (
+            <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => location.reload()}>
+              Try again
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

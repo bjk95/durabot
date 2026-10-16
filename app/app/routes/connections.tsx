@@ -1,8 +1,9 @@
-import { Form, Link, redirect, useNavigation } from "react-router";
+import { Check, TriangleAlert } from "lucide-react";
+import { Form, redirect, useNavigation, useRevalidator } from "react-router";
 import { cloudflareContext } from "../../workers/lib/context";
 import { connectLink, POPULAR_TOOLKITS, toolkitStatuses } from "../../workers/lib/composio";
 import { listBots } from "../../workers/lib/registry";
-import { Badge, Button, Card } from "../components/ui";
+import { LargeTitleScreen, LogoTile, Section } from "../components/ui";
 import type { Route } from "./+types/connections";
 
 export async function loader({ context }: Route.LoaderArgs) {
@@ -29,7 +30,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   try {
     const url = await connectLink(env, slug, new URL("/connections", request.url).toString());
     if (url) return redirect(url);
-    return { error: "Composio gave no link" };
+    return { error: "Composio gave no link." };
   } catch (e) {
     return { error: (e as Error).message };
   }
@@ -38,42 +39,71 @@ export async function action({ request, context }: Route.ActionArgs) {
 export default function Connections({ loaderData, actionData }: Route.ComponentProps) {
   const { toolkits, used, error } = loaderData;
   const nav = useNavigation();
-  const msg = error ?? (actionData as any)?.error;
+  const revalidator = useRevalidator();
+  const msg = error ? "Could not reach Composio. Check your connection." : (actionData as any)?.error;
+  const loading = revalidator.state === "loading";
+
   return (
-    <main className="mx-auto max-w-2xl px-4 pb-10 pt-6">
-      <header className="mb-5 flex items-center gap-3">
-        <Link to="/" className="text-lg text-muted">
-          ‹
-        </Link>
-        <h1 className="text-xl font-semibold">Connections</h1>
-      </header>
-      <p className="mb-4 text-sm text-muted">
-        You connect each app one time. Then you choose in each bot which apps it can use. Sign-in runs on Composio; durabot never sees your tokens.
-      </p>
-      {msg && <p className="mb-4 rounded-lg border border-danger p-3 text-sm text-danger">{msg}</p>}
-      <div className="space-y-2">
-        {toolkits.map((t) => (
-          <Card key={t.slug} className="flex items-center gap-3 py-3">
-            {t.logo ? <img src={t.logo} alt="" className="h-8 w-8 rounded" /> : <div className="h-8 w-8 rounded bg-surface-2" />}
-            <div className="min-w-0 flex-1">
-              <div className="font-medium">{t.name}</div>
-              <div className="truncate text-xs text-muted">
-                {used[t.slug]?.length ? `Used by ${used[t.slug]!.join(", ")}` : t.slug}
-              </div>
-            </div>
-            {t.connected ? (
-              <Badge tone="accent">Connected</Badge>
-            ) : (
-              <Form method="post">
-                <input type="hidden" name="slug" value={t.slug} />
-                <Button variant="outline" disabled={nav.state !== "idle"}>
-                  Connect
-                </Button>
-              </Form>
-            )}
-          </Card>
-        ))}
+    <LargeTitleScreen title="Connections" back>
+      <div className="note-card">
+        <LinkGlyph />
+        <span>You connect each app one time. Then you choose in each bot which apps it can use. Sign-in runs on Composio; durabot never sees your tokens.</span>
       </div>
-    </main>
+      {msg && (
+        <div className="banner" role="alert">
+          <TriangleAlert className="i" width={20} height={20} strokeWidth={1.8} />
+          <span>{msg}</span>
+          {error && (
+            <button type="button" className="btn" onClick={() => revalidator.revalidate()}>
+              Retry
+            </button>
+          )}
+        </div>
+      )}
+      <Section>
+        <div className="group">
+          {loading &&
+            [0, 1, 2].map((i) => (
+              <div className="frow" key={i} style={{ minHeight: 68 }}>
+                <span className="logo skel" style={{ height: 44 }} />
+                <span className="skel" style={{ flex: 1, maxWidth: 160 }} />
+              </div>
+            ))}
+          {!loading &&
+            toolkits.map((t) => (
+              <div className="frow" key={t.slug} style={{ minHeight: 68 }}>
+                <LogoTile src={t.logo} name={t.name} />
+                <div className="v">
+                  <b>{t.name}</b>
+                  <div style={{ font: "400 13px/18px var(--font-sans)", color: "var(--muted)" }}>
+                    {used[t.slug]?.length ? `Used by ${used[t.slug]!.join(", ")}` : "Not used yet"}
+                  </div>
+                </div>
+                {t.connected ? (
+                  <span className="badge badge-ok">
+                    <Check className="i" width={13} height={13} strokeWidth={2.4} />
+                    Connected
+                  </span>
+                ) : (
+                  <Form method="post">
+                    <input type="hidden" name="slug" value={t.slug} />
+                    <button className="btn btn-primary btn-sm" disabled={nav.state !== "idle"} aria-label={`Connect ${t.name}`}>
+                      Connect
+                    </button>
+                  </Form>
+                )}
+              </div>
+            ))}
+        </div>
+      </Section>
+    </LargeTitleScreen>
+  );
+}
+
+function LinkGlyph() {
+  return (
+    <svg className="i" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
+    </svg>
   );
 }

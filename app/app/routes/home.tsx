@@ -1,67 +1,45 @@
-import { useEffect } from "react";
-import { Link, useRevalidator } from "react-router";
-import { cloudflareContext } from "../../workers/lib/context";
-import { ensureBuilder } from "../../workers/lib/builder";
-import { listBots } from "../../workers/lib/registry";
-import { Badge, timeAgo } from "../components/ui";
-import type { Route } from "./+types/home";
+import { Pin } from "lucide-react";
+import { Link, useRouteLoaderData } from "react-router";
+import { Avatar, LargeTitleScreen, NavButtons } from "../components/ui";
+import { listTime } from "../lib/format";
+import type { BotListItem } from "../lib/protocol";
 
-export async function loader({ context }: Route.LoaderArgs) {
-  const { env } = context.get(cloudflareContext);
-  await ensureBuilder(env);
-  return { bots: await listBots(env) };
-}
-
-export default function Home({ loaderData }: Route.ComponentProps) {
-  const { bots } = loaderData;
-  const revalidator = useRevalidator();
-  useEffect(() => {
-    const t = setInterval(() => document.visibilityState === "visible" && revalidator.revalidate(), 15000);
-    return () => clearInterval(t);
-  }, [revalidator]);
+export default function Home() {
+  const data = useRouteLoaderData("routes/shell") as { bots: BotListItem[] } | undefined;
+  const bots = data?.bots ?? [];
+  const onlyBuilder = bots.length <= 1;
 
   return (
-    <main className="mx-auto flex min-h-full max-w-2xl flex-col px-4 pb-10 pt-6">
-      <header className="mb-5 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">durabot</h1>
-        <nav className="flex gap-4 text-sm text-muted">
-          <Link to="/connections" className="hover:text-ink">
-            Connections
-          </Link>
-          <Link to="/settings" className="hover:text-ink">
-            Settings
-          </Link>
-        </nav>
-      </header>
-
-      <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
+    <LargeTitleScreen title="durabot" right={<NavButtons />} flush>
+      <div className="list">
         {bots.map((b) => (
-          <li key={b.id}>
-            <Link to={`/bots/${b.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-surface-2">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-2 text-2xl">
-                {b.emoji}
+          <Link key={b.id} to={`/bots/${b.id}`} className="row">
+            <Avatar emoji={b.emoji} kind={b.kind} />
+            <span className="row-m">
+              <span className="row-t">
+                <b>{b.name}</b>
+                <time>{b.last_at ? listTime(b.last_at) : b.kind === "builder" ? "Now" : ""}</time>
               </span>
-              <span className="min-w-0 flex-1">
-                <span className="flex items-baseline justify-between gap-2">
-                  <span className="truncate font-medium">{b.name}</span>
-                  <span className="shrink-0 text-xs text-muted">{timeAgo(b.last_at)}</span>
-                </span>
-                <span className="flex items-center justify-between gap-2">
-                  <span className="truncate text-sm text-muted">
-                    {b.last_text || (b.kind === "builder" ? "Describe a bot to create it" : "No messages yet")}
+              <span className="row-s">
+                <span>{b.last_text || (b.kind === "builder" ? "Describe a bot and I will build it." : "No messages yet")}</span>
+                {b.kind === "builder" ? (
+                  <span className="pin" aria-label="Pinned">
+                    <Pin className="i" width={14} height={14} strokeWidth={1.8} />
                   </span>
-                  {b.unread > 0 && <Badge tone="accent">{b.unread}</Badge>}
-                </span>
+                ) : (
+                  b.unread > 0 && <span className="badge">{b.unread}</span>
+                )}
               </span>
-            </Link>
-          </li>
+            </span>
+          </Link>
         ))}
-      </ul>
-      {bots.length <= 1 && (
-        <p className="mt-4 text-sm text-muted">
-          Open Builder and say what you want, for example: "Make a bot that triages my Gmail every morning."
-        </p>
+      </div>
+      {onlyBuilder && (
+        <div className="empty" style={{ paddingTop: 8 }}>
+          <p>Open Builder and say what you want.</p>
+          <span className="suggest">Make a bot that checks my inbox every weekday at 8am.</span>
+        </div>
       )}
-    </main>
+    </LargeTitleScreen>
   );
 }

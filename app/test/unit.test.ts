@@ -153,3 +153,48 @@ describe("bot list preview", () => {
     expect(plainPreview("Created **Ping** (🏓). See [the docs](https://x.dev/a) and `code`\n\nbye")).toBe("Created Ping (🏓). See the docs and code bye");
   });
 });
+
+import { appName, dayLabel, humanizeSlug, listTime, modelShort, originOf, statusWord, toolName, toolVerb } from "../app/lib/format";
+
+describe("interface text helpers", () => {
+  const now = new Date(2026, 9, 16, 12, 0, 0); // Friday 16 October 2026, noon (local time)
+  const at = (d: number, h = 9) => new Date(2026, 9, d, h, 30).getTime();
+
+  it("labels days in a thread", () => {
+    expect(dayLabel(at(16), now)).toBe("Today");
+    expect(dayLabel(at(15), now)).toBe("Yesterday");
+    expect(dayLabel(at(12), now)).toMatch(/Monday/);
+    expect(dayLabel(new Date(2026, 8, 1).getTime(), now)).toMatch(/Sep/);
+  });
+
+  it("labels times in a list", () => {
+    expect(listTime(at(16), now)).toMatch(/9:30/);
+    expect(listTime(at(15), now)).toBe("Yesterday");
+    expect(listTime(at(13), now)).toMatch(/Tue/);
+    expect(listTime(0, now)).toBe("");
+  });
+
+  it("reads the origin of a proactive input", () => {
+    expect(originOf("schedule: weekdays at 8am")).toEqual({ kind: "schedule", text: "Weekdays at 8am" });
+    expect(originOf("trigger: GMAIL_NEW_GMAIL_MESSAGE")).toEqual({ kind: "trigger", text: "New gmail message" });
+    expect(originOf(null)).toBeNull();
+    expect(humanizeSlug("TODOIST_TASK_ADDED")).toBe("Task added");
+  });
+
+  it("names tools quietly", () => {
+    expect(toolName("GMAIL_FETCH_EMAILS(q=from:sam) → ok")).toBe("GMAIL_FETCH_EMAILS");
+    expect(toolVerb("COMPOSIO_SEARCH_TOOLS")).toBe("Searched tools");
+    expect(toolVerb("anything", true)).toBe("Using");
+    expect(toolVerb("configure_bot")).toBe("Changed settings");
+    expect(toolVerb("GMAIL_SEND")).toBe("Used");
+  });
+
+  it("shortens names and statuses", () => {
+    expect(modelShort("anthropic/claude-sonnet-5.5")).toBe("claude-sonnet-5.5");
+    expect(modelShort("nvidia/nemotron-3-super-120b-a12b:free")).toBe("nemotron-3-super-120b-a12b:free");
+    expect(appName("gmail")).toBe("Gmail");
+    expect(appName(undefined)).toBe("this app");
+    expect(statusWord("done")).toBe("Done");
+    expect(statusWord("aborted")).toBe("Stopped");
+  });
+});

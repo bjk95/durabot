@@ -1,1 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#3b4cca"/><rect x="136" y="176" width="240" height="176" rx="56" fill="#fff"/><circle cx="204" cy="264" r="22" fill="#3b4cca"/><circle cx="308" cy="264" r="22" fill="#3b4cca"/><rect x="244" y="116" width="24" height="64" rx="12" fill="#fff"/><circle cx="256" cy="112" r="20" fill="#fff"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e8f1ff"/><stop offset="1" stop-color="#bcd6ff"/></linearGradient>
+    <linearGradient id="h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#f3f7ff"/></linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#g)"/>
+  <rect x="116" y="170" width="280" height="206" rx="84" fill="url(#h)" stroke="#ffffffcc" stroke-width="3"/>
+  <rect x="186" y="236" width="40" height="76" rx="20" fill="#0062e0"/>
+  <rect x="286" y="236" width="40" height="76" rx="20" fill="#0062e0"/>
+  <rect x="245" y="112" width="22" height="66" rx="11" fill="#ffffff"/>
+  <circle cx="256" cy="106" r="22" fill="#0062e0"/>
+</svg>

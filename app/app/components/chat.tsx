@@ -2,15 +2,17 @@ import {
   AssistantRuntimeProvider,
   ComposerPrimitive,
   ThreadPrimitive,
+  useAuiState,
   useExternalStoreRuntime,
   type ThreadMessageLike,
 } from "@assistant-ui/react";
 import clsx from "clsx";
-import { ArrowUp, Link2, Loader2, Square, Undo2, Wrench } from "lucide-react";
+import { ArrowUp, Clock, Square, TriangleAlert, Undo2, Wrench, Zap } from "lucide-react";
 import { useMemo } from "react";
+import { appName, dayLabel, originOf, toolName, toolVerb } from "../lib/format";
 import type { BotConfig, LiveTool, LogRow } from "../lib/protocol";
 import type { useBot } from "../lib/use-bot";
-import { Button } from "./ui";
+import { Avatar, LinkIcon } from "./ui";
 
 type Bot = ReturnType<typeof useBot>;
 
@@ -23,26 +25,28 @@ interface UiMsg {
   running?: boolean;
   pending?: boolean;
   tools?: LiveTool[];
+  /** A date divider to show above this message. */
+  divider?: string;
 }
 
 function toUiMessages(bot: Bot): UiMsg[] {
-  const list: UiMsg[] = bot.rows.map((row) => ({
-    id: `row-${row.id}`,
-    role: row.role === "user" && !row.label ? "user" : "assistant",
-    text: row.text,
-    ts: row.ts,
-    row,
-  }));
+  const list: UiMsg[] = [];
+  let lastDay = "";
+  for (const row of bot.rows) {
+    const day = dayLabel(row.ts);
+    list.push({
+      id: `row-${row.id}`,
+      role: row.role === "user" && !row.label ? "user" : "assistant",
+      text: row.text,
+      ts: row.ts,
+      row,
+      divider: day !== lastDay ? day : undefined,
+    });
+    lastDay = day;
+  }
   for (const p of bot.pending) list.push({ id: `pending-${p.id}`, role: "user", text: p.text, ts: p.ts, pending: true });
   if (bot.live.running || bot.live.text) {
-    list.push({
-      id: "live",
-      role: "assistant",
-      text: bot.live.text,
-      ts: Date.now(),
-      running: true,
-      tools: bot.live.tools,
-    });
+    list.push({ id: "live", role: "assistant", text: bot.live.text, ts: Date.now(), running: true, tools: bot.live.tools });
   }
   return list;
 }
@@ -58,7 +62,15 @@ function convert(m: UiMsg): ThreadMessageLike {
   } as ThreadMessageLike;
 }
 
-export function Chat({ bot, config }: { bot: Bot; config: BotConfig }) {
+export function Chat({
+  bot,
+  config,
+  onScroll,
+}: {
+  bot: Bot;
+  config: BotConfig;
+  onScroll?: (top: number) => void;
+}) {
   const messages = useMemo(() => toUiMessages(bot), [bot.rows, bot.pending, bot.live]);
   const runtime = useExternalStoreRuntime<UiMsg>({
     messages,
@@ -70,57 +82,56 @@ export function Chat({ bot, config }: { bot: Bot; config: BotConfig }) {
     },
     onCancel: async () => bot.send({ type: "abort" }),
   });
+  const empty = bot.loaded && bot.rows.length === 0 && bot.pending.length === 0 && !bot.live.running;
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <ThreadPrimitive.Root className="flex h-full min-h-0 flex-col">
-        <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto px-3 py-4 sm:px-4">
-          <div className="mx-auto flex max-w-2xl flex-col gap-2">
+      <ThreadPrimitive.Root style={{ display: "contents" }}>
+        <ThreadPrimitive.Viewport className="scroller pin-bottom" onScroll={(e) => onScroll?.(e.currentTarget.scrollTop)}>
+          <div className="thread" style={{ ["--pt" as string]: "calc(var(--safe-top) + 150px)" }}>
             {bot.hasMore && (
-              <button onClick={bot.loadOlder} className="mx-auto mb-2 rounded-full bg-surface-2 px-3 py-1 text-xs text-muted hover:opacity-80">
+              <button type="button" onClick={bot.loadOlder} className="earlier glass-clear dim">
                 Load earlier messages
               </button>
-            )}
-            {bot.loaded && bot.rows.length === 0 && bot.pending.length === 0 && (
-              <div className="py-16 text-center text-muted">
-                <div className="mb-2 text-4xl">{config.emoji}</div>
-                <p className="font-medium text-ink">{config.name}</p>
-                <p className="mt-1 text-sm">Say something to start the thread.</p>
-              </div>
             )}
             <ThreadPrimitive.Messages>
               {({ message }) => <MessageView ui={(message.metadata as any)?.custom?.ui as UiMsg} bot={bot} />}
             </ThreadPrimitive.Messages>
           </div>
         </ThreadPrimitive.Viewport>
-        <Composer running={bot.live.running} onStop={() => bot.send({ type: "abort" })} />
+        {empty && (
+          <div className="center-pg" style={{ pointerEvents: "none" }}>
+            <div className="empty">
+              <Avatar emoji={config.emoji} kind={config.kind} size="l" />
+              <h2>{config.name}</h2>
+              <p>Say something to start the thread.</p>
+            </div>
+          </div>
+        )}
+        <div className="edge edge-b" />
+        <Composer name={config.name} running={bot.live.running} onStop={() => bot.send({ type: "abort" })} />
       </ThreadPrimitive.Root>
     </AssistantRuntimeProvider>
   );
 }
 
-function Composer({ running, onStop }: { running: boolean; onStop: () => void }) {
+/** The glass composer. The send button becomes Stop while the bot works. */
+function Composer({ name, running, onStop }: { name: string; running: boolean; onStop: () => void }) {
+  const isEmpty = useAuiState((s) => s.composer.isEmpty);
   return (
-    <ComposerPrimitive.Root className="border-t border-line bg-bg px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4">
-      <div className="mx-auto flex max-w-2xl items-end gap-2 rounded-2xl border border-line bg-surface p-2 focus-within:border-accent">
-        <ComposerPrimitive.Input
-          rows={1}
-          autoFocus
-          placeholder="Message"
-          className="max-h-40 flex-1 resize-none bg-transparent px-2 py-1.5 text-base outline-none sm:text-sm"
-        />
-        {running ? (
-          <Button type="button" variant="outline" onClick={onStop} aria-label="Stop" className="h-9 w-9 rounded-full p-0">
-            <Square className="h-4 w-4" />
-          </Button>
-        ) : (
-          <ComposerPrimitive.Send asChild>
-            <Button aria-label="Send" className="h-9 w-9 rounded-full p-0">
-              <ArrowUp className="h-4 w-4" />
-            </Button>
-          </ComposerPrimitive.Send>
-        )}
-      </div>
+    <ComposerPrimitive.Root className="composer glass">
+      <ComposerPrimitive.Input rows={1} autoFocus placeholder={running ? `${name} is working…` : `Message ${name}`} className="field" />
+      {running ? (
+        <button type="button" className="send is-stop" aria-label="Stop" onClick={onStop}>
+          <Square className="i" width={20} height={20} fill="currentColor" strokeWidth={0} />
+        </button>
+      ) : (
+        <ComposerPrimitive.Send asChild>
+          <button type="submit" className={clsx("send", isEmpty && "is-off")} aria-label="Send" disabled={isEmpty}>
+            <ArrowUp className="i" width={22} height={22} strokeWidth={2.4} />
+          </button>
+        </ComposerPrimitive.Send>
+      )}
     </ComposerPrimitive.Root>
   );
 }
@@ -128,96 +139,113 @@ function Composer({ running, onStop }: { running: boolean; onStop: () => void })
 function MessageView({ ui, bot }: { ui: UiMsg | undefined; bot: Bot }) {
   if (!ui) return null;
   const row = ui.row;
+  const divider = ui.divider ? <div className="datediv">{ui.divider}</div> : null;
 
   if (ui.running) {
     return (
-      <div className="space-y-1">
+      <>
         {ui.tools?.map((t) => (
-          <ToolLine key={t.id} text={t.name} busy={!t.done} />
+          <ToolLine key={t.id} name={t.name} running={!t.done} />
         ))}
-        <Bubble role="assistant">
-          {ui.text ? <Text text={ui.text} /> : <Loader2 className="h-4 w-4 animate-spin text-muted" />}
-        </Bubble>
-      </div>
+        <div className="msg msg-bot">
+          {ui.text && <Text text={ui.text} />}
+          <span className="dots" aria-label="Working">
+            <i />
+            <i />
+            <i />
+          </span>
+        </div>
+      </>
     );
   }
 
   if (row?.role === "tool") {
+    const connect = row.meta?.connect;
     return (
-      <div className="space-y-1.5">
-        <ToolLine text={row.text} />
-        {row.meta?.connect && (
-          <a
-            href={row.meta.connect.url}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-2 rounded-xl border border-accent bg-surface px-3 py-2 text-sm font-medium text-accent"
-          >
-            <Link2 className="h-4 w-4" />
-            Connect {row.meta.connect.toolkit ?? "this app"}
-          </a>
+      <>
+        {divider}
+        <ToolLine name={toolName(row.text)} title={row.text} />
+        {connect && (
+          <div className="connect glass">
+            <span className="logo" aria-hidden="true">
+              <LinkIcon className="i" width={22} height={22} strokeWidth={1.8} />
+            </span>
+            <div className="connect-t">
+              <b>Connect {appName(connect.toolkit)}</b>
+              <small>Needed to finish this</small>
+            </div>
+            <a className="btn btn-primary" href={connect.url} target="_blank" rel="noreferrer">
+              Connect
+            </a>
+          </div>
         )}
-      </div>
+      </>
     );
   }
 
   if (row?.role === "system") {
     const change = row.meta?.change;
+    if (change) {
+      return (
+        <>
+          {divider}
+          <div className={clsx("change glass", change.undone && "is-undone")}>
+            <span className="change-t">{row.text}</span>
+            {change.undone ? (
+              <span className="undone-l">Undone</span>
+            ) : (
+              <button type="button" className="btn btn-text glass-clear" onClick={() => bot.send({ type: "undo", rowId: row.id })}>
+                <Undo2 className="i" width={15} height={15} strokeWidth={2} /> Undo
+              </button>
+            )}
+          </div>
+        </>
+      );
+    }
     return (
-      <div className="my-1 flex items-center justify-center gap-2 text-xs text-muted">
-        <span className={clsx("rounded-full bg-surface-2 px-3 py-1", change?.undone && "line-through")}>{row.text}</span>
-        {change && !change.undone && (
-          <button
-            onClick={() => bot.send({ type: "undo", rowId: row.id })}
-            className="inline-flex items-center gap-1 rounded-full border border-line px-2 py-1 hover:bg-surface-2"
-          >
-            <Undo2 className="h-3 w-3" /> Undo
-          </button>
-        )}
-      </div>
+      <>
+        {divider}
+        <div className="banner" role="alert">
+          <TriangleAlert className="i" width={20} height={20} strokeWidth={1.8} />
+          <span>{row.text}</span>
+        </div>
+      </>
     );
   }
 
   if (row?.label) {
+    const origin = originOf(row.label)!;
+    const Icon = origin.kind === "trigger" ? Zap : Clock;
     return (
-      <div className="space-y-1">
-        <div className="text-center text-xs text-muted">{row.label}</div>
-        <Bubble role="user" muted>
-          <Text text={row.text} />
-        </Bubble>
-      </div>
+      <>
+        {divider}
+        <div className="origin" title={row.text}>
+          <Icon className="i" width={13} height={13} strokeWidth={2} />
+          <span>
+            {origin.kind === "trigger" ? "Trigger" : "Schedule"} · {origin.text}
+          </span>
+        </div>
+      </>
     );
   }
 
   return (
-    <Bubble role={ui.role} faded={ui.pending}>
-      <Text text={ui.text} />
-    </Bubble>
+    <>
+      {divider}
+      <div className={clsx("msg", ui.role === "user" ? "msg-user" : "msg-bot", ui.pending && "is-pending")}>
+        <Text text={ui.text} />
+      </div>
+    </>
   );
 }
 
-function Bubble({
-  role,
-  children,
-  faded,
-  muted,
-}: {
-  role: "user" | "assistant";
-  children: React.ReactNode;
-  faded?: boolean;
-  muted?: boolean;
-}) {
+function ToolLine({ name, running, title }: { name: string; running?: boolean; title?: string }) {
   return (
-    <div className={clsx("flex", role === "user" ? "justify-end" : "justify-start")}>
-      <div
-        className={clsx(
-          "max-w-[85%] rounded-2xl px-3.5 py-2 text-[15px] leading-relaxed sm:text-sm",
-          role === "user" ? (muted ? "bg-surface-2 text-ink" : "bg-accent text-accent-ink") : "border border-line bg-surface",
-          faded && "opacity-60",
-        )}
-      >
-        {children}
-      </div>
+    <div className="tool" title={title}>
+      {running ? <span className="spin" aria-label="Running" /> : <Wrench className="i" width={13} height={13} strokeWidth={2} />}
+      <span>
+        {toolVerb(name, running)} · <span className="mono">{name}</span>
+      </span>
     </div>
   );
 }
@@ -230,10 +258,10 @@ export function Inline({ text }: { text: string }) {
     <>
       {text.split(INLINE).map((part, i) => {
         const link = part.match(/^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/);
-        if (link) return <a key={i} href={link[2]} target="_blank" rel="noreferrer" className="underline">{link[1]}</a>;
-        if (/^https?:\/\//.test(part)) return <a key={i} href={part} target="_blank" rel="noreferrer" className="underline">{part}</a>;
-        if (/^\*\*[^*]+\*\*$/.test(part)) return <strong key={i}>{part.slice(2, -2)}</strong>;
-        if (/^`[^`]+`$/.test(part)) return <code key={i} className="rounded bg-surface-2 px-1">{part.slice(1, -1)}</code>;
+        if (link) return <a key={i} href={link[2]} target="_blank" rel="noreferrer">{link[1]}</a>;
+        if (/^https?:\/\//.test(part)) return <a key={i} href={part} target="_blank" rel="noreferrer">{part}</a>;
+        if (/^\*\*[^*]+\*\*$/.test(part)) return <b key={i}>{part.slice(2, -2)}</b>;
+        if (/^`[^`]+`$/.test(part)) return <code key={i}>{part.slice(1, -1)}</code>;
         return part;
       })}
     </>
@@ -242,21 +270,12 @@ export function Inline({ text }: { text: string }) {
 
 function Text({ text }: { text: string }) {
   return (
-    <div className="prose-chat whitespace-pre-wrap break-words">
+    <>
       {text.split(/\n{2,}/).map((p, i) => (
-        <p key={i}>
+        <p key={i} style={{ whiteSpace: "pre-wrap" }}>
           <Inline text={p} />
         </p>
       ))}
-    </div>
-  );
-}
-
-function ToolLine({ text, busy }: { text: string; busy?: boolean }) {
-  return (
-    <div className="flex items-center gap-1.5 px-1 text-xs text-muted">
-      {busy ? <Loader2 className="h-3 w-3 shrink-0 animate-spin" /> : <Wrench className="h-3 w-3 shrink-0" />}
-      <span className="truncate">{text}</span>
-    </div>
+    </>
   );
 }

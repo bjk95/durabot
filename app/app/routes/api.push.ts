@@ -1,5 +1,5 @@
 import { cloudflareContext } from "../../workers/lib/context";
-import { savePushSub } from "../../workers/lib/registry";
+import { deletePushSub, savePushSub } from "../../workers/lib/registry";
 import type { Route } from "./+types/api.push";
 
 export function loader({ context }: Route.LoaderArgs) {
@@ -9,6 +9,11 @@ export function loader({ context }: Route.LoaderArgs) {
 
 export async function action({ request, context }: Route.ActionArgs) {
   const { env } = context.get(cloudflareContext);
+  if (request.method === "DELETE") {
+    const { endpoint } = (await request.json()) as { endpoint?: string };
+    if (endpoint) await deletePushSub(env, endpoint);
+    return Response.json({ ok: true });
+  }
   const sub = (await request.json()) as { endpoint?: string; keys?: { p256dh?: string; auth?: string } };
   if (!sub.endpoint?.startsWith("https://") || !sub.keys?.p256dh || !sub.keys?.auth) {
     return Response.json({ error: "Bad subscription" }, { status: 400 });
