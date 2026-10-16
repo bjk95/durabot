@@ -1,0 +1,23 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "durabot",
+	"compatibility_date": "2026-09-01",
+	"compatibility_flags": ["nodejs_compat", "nodejs_compat_populate_process_env"],
+	"main": "./workers/app.ts",
+	"observability": { "enabled": true },
+	"upload_source_maps": true,
+	"durable_objects": {
+		"bindings": [{ "name": "BotAgent", "class_name": "BotAgent" }]
+	},
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["BotAgent"] }],
+	"d1_databases": [
+		{ "binding": "DB", "database_name": "durabot", "migrations_dir": "migrations" }
+	],
+	"r2_buckets": [{ "binding": "FILES", "bucket_name": "durabot-files" }],
+	"vars": {
+		"GATEWAY_BASE": "https://gateway.ai.cloudflare.com/v1/3192ba96abd051f723cd318cc78a512e/durabot/openrouter",
+		"DEFAULT_MODEL": "nvidia/nemotron-3-super-120b-a12b:free",
+		"SUMMARY_MODEL": "nvidia/nemotron-3-super-120b-a12b:free",
+		"OWNER_TIMEZONE": "UTC"
+	}
+}

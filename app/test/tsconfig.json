@@ -1,0 +1,5 @@
+{
+  "extends": "../tsconfig.cloudflare.json",
+  "include": ["./**/*.ts", "../workers/**/*", "../app/lib/**/*", "../worker-configuration.d.ts"],
+  "compilerOptions": { "types": ["@cloudflare/vitest-plugin/types", "vite/client"], "composite": false, "noEmit": true }
+}
