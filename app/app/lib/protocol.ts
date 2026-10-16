@@ -16,7 +16,7 @@ export interface TriggerCfg {
   id: string;
   /** Composio trigger slug, for example GMAIL_NEW_GMAIL_MESSAGE. */
   slug: string;
-  config: Record<string, unknown>;
+  config: Record<string, any>;
   /** What the bot receives with the event. */
   prompt: string;
 }

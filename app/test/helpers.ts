@@ -2,8 +2,10 @@ import { env } from "cloudflare:test";
 import { getAgentByName } from "agents";
 import migration from "../migrations/0001_init.sql?raw";
 import type { BotConfig, LogRow } from "../app/lib/protocol";
+import type { AppEnv } from "../workers/lib/env";
 
-const e = env as any;
+// D1 rows are read as loose objects in tests.
+const e = env as unknown as Omit<AppEnv, "DB"> & { DB: any };
 
 /** Create the D1 tables once for this test file. */
 export async function setupDb() {
@@ -15,6 +17,29 @@ export async function setupDb() {
     .map((s) => s.replace(/\s+/g, " ").trim())
     .filter(Boolean);
   await e.DB.batch(statements.map((s: string) => e.DB.prepare(s)));
+}
+
+/** The methods that tests call on a bot. A plain interface keeps the RPC types shallow. */
+export interface BotStub {
+  ingest(source: string, body: string, label?: string | null, operationId?: string): Promise<string>;
+  configure(a: unknown): Promise<{ ok: boolean; message: string }>;
+  getConfig(): Promise<BotConfig>;
+  rows(before: number | null): Promise<{ rows: LogRow[]; hasMore: boolean }>;
+  search(query: string): Promise<unknown>;
+  resetContext(): Promise<void>;
+  debugContext(): Promise<{ entries: number; tokens: number; alarms: number; systemEntries: number }>;
+  debugSetLastActivity(ts: number): Promise<void>;
+  undoChange(rowId: number): Promise<void>;
+  runSchedule(p: { id: string }): Promise<void>;
+  handleTrigger(e: { triggerId: string; slug: string; data: unknown }): Promise<void>;
+  writeMemory(scope: "bot" | "shared", content: string): Promise<void>;
+  readMemory(scope: "bot" | "shared"): Promise<string>;
+  destroyBot(): Promise<void>;
+  initConfig(cfg: BotConfig): Promise<void>;
+}
+
+export async function botStub(id: string): Promise<BotStub> {
+  return (await getAgentByName(e.BotAgent as any, id)) as unknown as BotStub;
 }
 
 export function config(over: Partial<BotConfig> = {}): BotConfig {
@@ -34,7 +59,7 @@ export function config(over: Partial<BotConfig> = {}): BotConfig {
 
 export async function makeBot(over: Partial<BotConfig> = {}) {
   const cfg = config(over);
-  const stub = await getAgentByName(e.BotAgent, cfg.id);
+  const stub = await botStub(cfg.id);
   await stub.initConfig(cfg);
   return { cfg, stub };
 }
@@ -50,8 +75,21 @@ export async function until<T>(pick: () => Promise<T | undefined | false>, ms = 
   }
 }
 
-export async function allRows(stub: { rows(b: number | null): Promise<{ rows: LogRow[] }> }): Promise<LogRow[]> {
+export async function allRows(stub: { rows(b: number | null): Promise<{ rows: LogRow[]; hasMore: boolean }> }): Promise<LogRow[]> {
   return (await stub.rows(null)).rows;
 }
 
 export const testEnv = e;
+
+/** Wait for a row, and show the whole thread if it never comes. */
+export async function waitRow(stub: BotStub, role: string, includes: string, ms = 20000) {
+  const t0 = Date.now();
+  for (;;) {
+    const rows = await allRows(stub);
+    if (rows.some((r) => r.role === role && r.text.includes(includes))) return rows;
+    if (Date.now() - t0 > ms) {
+      throw new Error(`No ${role} row with "${includes}". Thread: ${JSON.stringify(rows.map((r) => [r.role, r.text.slice(0, 120)]))}`);
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}

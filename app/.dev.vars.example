@@ -1,0 +1,11 @@
+# Copy to .dev.vars for local development. Never commit .dev.vars.
+OPENROUTER_API_KEY=sk-or-v1-...
+COMPOSIO_API_KEY=ak_...
+# Token of the AI Gateway (Gateway page, Create token).
+CF_AIG_TOKEN=cfut_...
+# From: node scripts/gen-vapid.mjs
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=mailto:you@example.com
+# Only needed for Composio triggers (the signing secret of your webhook).
+COMPOSIO_WEBHOOK_SECRET=

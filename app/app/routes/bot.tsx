@@ -73,7 +73,7 @@ export default function BotPage({ loaderData, actionData }: Route.ComponentProps
 
   return (
     <div className="mx-auto flex h-dvh max-w-3xl flex-col">
-      <header className="flex items-center gap-3 border-b border-line px-3 py-2.5">
+      <header className="flex items-center gap-2 border-b border-line px-2 py-2.5 sm:gap-3 sm:px-3">
         <Link to="/" aria-label="Back" className="rounded-lg px-2 py-1 text-lg text-muted hover:bg-surface-2">
           ‹
         </Link>
@@ -82,12 +82,12 @@ export default function BotPage({ loaderData, actionData }: Route.ComponentProps
           <div className="truncate font-medium leading-tight">{bot.name}</div>
           <div className="truncate text-xs text-muted">{bot.model}</div>
         </div>
-        <nav className="flex gap-1 rounded-lg bg-surface-2 p-1 text-sm">
+        <nav className="flex shrink-0 gap-0.5 rounded-lg bg-surface-2 p-0.5 text-xs sm:gap-1 sm:p-1 sm:text-sm">
           {TABS.map((t) => (
             <button
               key={t}
               onClick={() => setParams(t === "chat" ? {} : { tab: t }, { replace: true })}
-              className={`rounded-md px-3 py-1 capitalize ${tab === t ? "bg-surface font-medium shadow-sm" : "text-muted"}`}
+              className={`rounded-md px-2 py-1 capitalize sm:px-3 ${tab === t ? "bg-surface font-medium shadow-sm" : "text-muted"}`}
             >
               {t}
             </button>

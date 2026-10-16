@@ -1,10 +1,11 @@
-import { getAgentByName } from "agents";
 import { beforeAll, describe, expect, it } from "vitest";
-import { allRows, makeBot, setupDb, testEnv, until } from "./helpers";
+import type { LogRow } from "../app/lib/protocol";
+import { allRows, botStub, makeBot, setupDb, testEnv, until, waitRow } from "./helpers";
 
 beforeAll(setupDb);
 
-const hasRow = (rows: any[], role: string, includes: string) => rows.find((r) => r.role === role && r.text.includes(includes));
+const hasRow = (rows: LogRow[], role: string, includes: string): boolean =>
+  rows.some((r) => r.role === role && r.text.includes(includes));
 
 describe("BotAgent chat", () => {
   it("answers a chat message and logs it as one thread", async () => {
@@ -21,12 +22,9 @@ describe("BotAgent chat", () => {
   it("runs a tool and keeps one summary row", async () => {
     const { stub } = await makeBot();
     await stub.ingest("chat", "first message about pineapples");
-    await until(async () => hasRow(await allRows(stub), "assistant", "ECHO: first"));
+    await waitRow(stub, "assistant", "ECHO: first");
     await stub.ingest("chat", 'TOOL:search_history:{"query":"pineapples"}');
-    const rows = await until(async () => {
-      const r = await allRows(stub);
-      return hasRow(r, "assistant", "TOOL RESULT") && r;
-    });
+    const rows = await waitRow(stub, "assistant", "TOOL RESULT");
     const tool = rows.find((r) => r.role === "tool")!;
     expect(tool.text).toContain("search_history(query=pineapples)");
     expect(tool.text).toContain("pineapples"); // the search found the earlier message
@@ -35,7 +33,7 @@ describe("BotAgent chat", () => {
   it("records runs in the registry (D14)", async () => {
     const { cfg, stub } = await makeBot();
     await stub.ingest("chat", "hi");
-    await until(async () => hasRow(await allRows(stub), "assistant", "ECHO"));
+    await waitRow(stub, "assistant", "ECHO");
     const run = await until(async () => {
       const r = await testEnv.DB.prepare(`SELECT * FROM runs WHERE bot_id = ?1`).bind(cfg.id).first();
       return r?.status === "done" ? r : false;
@@ -48,7 +46,7 @@ describe("BotAgent chat", () => {
   it("counts unread replies when nobody is connected (D18)", async () => {
     const { cfg, stub } = await makeBot();
     await stub.ingest("chat", "hi");
-    await until(async () => hasRow(await allRows(stub), "assistant", "ECHO"));
+    await waitRow(stub, "assistant", "ECHO");
     const bot = await until(async () => {
       const b = await testEnv.DB.prepare(`SELECT unread FROM bots WHERE id = ?1`).bind(cfg.id).first();
       return b.unread > 0 && b;
@@ -57,13 +55,29 @@ describe("BotAgent chat", () => {
   });
 });
 
+describe("stable system prompt", () => {
+  it("does not add a system entry between turns, even when the clock moves on", async () => {
+    // A prompt that changes (for example with the time) adds a Pi system entry and breaks the provider prompt cache.
+    const { stub } = await makeBot();
+    await stub.ingest("chat", "one");
+    await waitRow(stub, "assistant", "ECHO: one");
+    await new Promise((r) => setTimeout(r, 1500));
+    await stub.ingest("chat", "two");
+    await waitRow(stub, "assistant", "ECHO: two");
+    await new Promise((r) => setTimeout(r, 1500));
+    await stub.ingest("chat", "three");
+    await waitRow(stub, "assistant", "ECHO: three");
+    expect((await stub.debugContext()).systemEntries).toBe(1);
+  });
+});
+
 describe("one long thread (D15, D16, D17)", () => {
   it("resets the Pi context but keeps the full thread, and search still finds old turns", async () => {
     const { stub } = await makeBot();
     await stub.ingest("chat", "remember my cat is called Biscuit");
-    await until(async () => hasRow(await allRows(stub), "assistant", "ECHO: remember"));
+    await waitRow(stub, "assistant", "ECHO: remember");
     await stub.ingest("chat", "and I like green tea");
-    await until(async () => hasRow(await allRows(stub), "assistant", "ECHO: and I like"));
+    await waitRow(stub, "assistant", "ECHO: and I like");
     const before = await stub.debugContext();
     expect(before.entries).toBeGreaterThan(3);
 
@@ -77,7 +91,7 @@ describe("one long thread (D15, D16, D17)", () => {
 
     // The thread keeps going after a reset, and old turns are searchable (BM25).
     await stub.ingest("chat", "what is my cat called?");
-    await until(async () => hasRow(await allRows(stub), "assistant", "ECHO: what is my cat"));
+    await waitRow(stub, "assistant", "ECHO: what is my cat");
     const hits = (await stub.search("Biscuit cat")) as any[];
     expect(hits.length).toBeGreaterThan(0);
     expect(hits[0].snippet).toContain("Biscuit");
@@ -86,10 +100,10 @@ describe("one long thread (D15, D16, D17)", () => {
   it("starts a fresh context automatically after a long idle gap", async () => {
     const { stub } = await makeBot();
     await stub.ingest("chat", "one");
-    await until(async () => hasRow(await allRows(stub), "assistant", "ECHO: one"));
+    await waitRow(stub, "assistant", "ECHO: one");
     await stub.debugSetLastActivity(Date.now() - 5 * 60 * 60 * 1000); // 5 hours ago
     await stub.ingest("chat", "two");
-    await until(async () => hasRow(await allRows(stub), "assistant", "ECHO: two"));
+    await waitRow(stub, "assistant", "ECHO: two");
     const ctx = await stub.debugContext();
     // handoff + "two" + answer. The first exchange is gone from the Pi context.
     expect(ctx.entries).toBeLessThanOrEqual(5);
@@ -201,32 +215,32 @@ describe("memory (D10)", () => {
 
 describe("Builder (D21)", () => {
   it("creates a bot from chat and deletes it again, with all storage", async () => {
-    const { stub } = await makeBot({ id: "builder", kind: "builder", name: "Builder" });
+    const { stub } = await makeBot({ kind: "builder", name: "Builder" });
     await stub.ingest("chat", 'TOOL:create_bot:{"name":"Inbox","emoji":"📧","persona":"Triage mail.","toolkits":["gmail"]}');
-    await until(async () => hasRow(await allRows(stub), "assistant", "TOOL RESULT: Created bot"));
+    await waitRow(stub, "assistant", "TOOL RESULT: Created bot");
     const created = await testEnv.DB.prepare(`SELECT * FROM bots WHERE name = 'Inbox'`).first();
     expect(created).toBeTruthy();
     expect(created.kind).toBe("bot");
     expect(JSON.parse(created.toolkits)).toEqual(["gmail"]);
 
     // The new bot works.
-    const bot = await getAgentByName(testEnv.BotAgent, created.id);
+    const bot = await botStub(created.id);
     expect((await bot.getConfig()).persona).toBe("Triage mail.");
     await bot.ingest("chat", "hi");
-    await until(async () => hasRow(await allRows(bot), "assistant", "ECHO: hi"));
+    await waitRow(bot, "assistant", "ECHO: hi");
     await testEnv.FILES.put(`bots/${created.id}/avatar.png`, "x");
 
     // Delete it from chat.
     await stub.ingest("chat", `TOOL:delete_bot:{"id":"${created.id}"}`);
-    await until(async () => hasRow(await allRows(stub), "assistant", "TOOL RESULT: Deleted bot"));
+    await waitRow(stub, "assistant", "TOOL RESULT: Deleted bot");
     expect(await testEnv.DB.prepare(`SELECT id FROM bots WHERE id = ?1`).bind(created.id).first()).toBeNull();
     expect(await testEnv.DB.prepare(`SELECT id FROM runs WHERE bot_id = ?1`).bind(created.id).first()).toBeNull();
     expect((await testEnv.FILES.list({ prefix: `bots/${created.id}/` })).objects).toHaveLength(0);
   });
 
   it("does not let Builder delete itself", async () => {
-    const { stub } = await makeBot({ id: "builder", kind: "builder", name: "Builder" });
-    await stub.ingest("chat", 'TOOL:delete_bot:{"id":"builder"}');
-    await until(async () => hasRow(await allRows(stub), "assistant", "Builder cannot be deleted"));
+    const { cfg, stub } = await makeBot({ kind: "builder", name: "Builder" });
+    await stub.ingest("chat", `TOOL:delete_bot:{"id":"${cfg.id}"}`);
+    await waitRow(stub, "assistant", "Builder cannot be deleted");
   });
 });
