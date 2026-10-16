@@ -5,6 +5,7 @@ import { reduceLive } from "../workers/lib/live";
 import { nextRun, validateCron } from "../workers/lib/schedule";
 import { contextTokens, entriesToRows, wrapInput, type PiEntry } from "../workers/lib/thread";
 import { reducer, INIT } from "../app/lib/use-bot";
+import { plainPreview } from "../workers/lib/registry";
 
 const user = (id: number, content: string): PiEntry => ({ id, kind: "pi.user", model: [{ role: "user", content, timestamp: 1000 + id }] });
 const assistant = (id: number, content: any[], extra: any = {}): PiEntry => ({
@@ -144,5 +145,11 @@ describe("client thread reducer", () => {
     s = reducer(s, { type: "server", msg: { type: "older", rows: [row(3, "user", "c"), row(4, "assistant", "d"), row(5, "user", "e")], hasMore: false } });
     expect(s.rows.map((r) => r.id)).toEqual([3, 4, 5, 6]);
     expect(s.hasMore).toBe(false);
+  });
+});
+
+describe("bot list preview", () => {
+  it("removes markdown marks and links", () => {
+    expect(plainPreview("Created **Ping** (🏓). See [the docs](https://x.dev/a) and `code`\n\nbye")).toBe("Created Ping (🏓). See the docs and code bye");
   });
 });

@@ -6,8 +6,10 @@ export interface ScheduleCfg {
   id: string;
   /** The plain words the owner used, for example "weekdays at 8am". */
   text: string;
-  /** Five-field cron expression, in the owner time zone (D31). */
+  /** Five-field cron expression, in the owner time zone (D31). Empty for a one-time task. */
   cron: string;
+  /** ISO time of a one-time task. The schedule is removed when it runs. */
+  at?: string;
   /** What the bot receives when the schedule fires. */
   prompt: string;
 }

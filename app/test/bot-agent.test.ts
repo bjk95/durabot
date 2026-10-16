@@ -163,6 +163,38 @@ describe("settings by chat (D26, D27, D28)", () => {
   });
 });
 
+describe("one-time schedules", () => {
+  it("runs once at the given time and then removes itself", async () => {
+    const { cfg, stub } = await makeBot();
+    const at = new Date(Date.now() + 2500).toISOString();
+    const r = await stub.configure({ add_schedule: { text: "in a moment", at, prompt: "Say hello once" } });
+    expect(r.ok).toBe(true);
+    expect((await stub.getConfig()).schedules[0]).toMatchObject({ at, cron: "" });
+    const rows = await waitRow(stub, "assistant", "ECHO: Say hello once", 30000);
+    expect(rows.find((x) => x.role === "user")!.label).toBe("schedule: in a moment");
+    // It is gone from the settings, and no alarm is left.
+    const left = await until(async () => ((await stub.getConfig()).schedules.length === 0 ? true : false));
+    expect(left).toBe(true);
+    expect((await stub.debugContext()).alarms).toBe(0);
+    const run = await testEnv.DB.prepare(`SELECT source FROM runs WHERE bot_id = ?1`).bind(cfg.id).first();
+    expect(run.source).toBe("schedule");
+  });
+
+  it("refuses bad input", async () => {
+    const { stub } = await makeBot();
+    const past = await stub.configure({ add_schedule: { text: "x", at: new Date(Date.now() - 3600_000).toISOString(), prompt: "p" } });
+    expect(past.ok).toBe(false);
+    expect(past.message).toContain("past");
+    const both = await stub.configure({ add_schedule: { text: "x", cron: "0 8 * * *", at: new Date(Date.now() + 3600_000).toISOString(), prompt: "p" } });
+    expect(both.ok).toBe(false);
+    const neither = await stub.configure({ add_schedule: { text: "x", prompt: "p" } });
+    expect(neither.ok).toBe(false);
+    const junk = await stub.configure({ add_schedule: { text: "x", at: "tomorrow-ish", prompt: "p" } });
+    expect(junk.ok).toBe(false);
+    expect((await stub.getConfig()).schedules).toHaveLength(0);
+  });
+});
+
 describe("proactive runs (D4, D11, D18)", () => {
   it("runs a schedule into the same thread with a label", async () => {
     const { cfg, stub } = await makeBot();
@@ -236,6 +268,24 @@ describe("Builder (D21)", () => {
     expect(await testEnv.DB.prepare(`SELECT id FROM bots WHERE id = ?1`).bind(created.id).first()).toBeNull();
     expect(await testEnv.DB.prepare(`SELECT id FROM runs WHERE bot_id = ?1`).bind(created.id).first()).toBeNull();
     expect((await testEnv.FILES.list({ prefix: `bots/${created.id}/` })).objects).toHaveLength(0);
+  });
+
+  it("changes another bot with configure_bot, and cannot use configure_self", async () => {
+    const { stub } = await makeBot({ kind: "builder", name: "Builder" });
+    const target = await makeBot({ name: "Target" });
+    const args = JSON.stringify({ id: target.cfg.id, add_schedule: { text: "daily", cron: "0 8 * * *", prompt: "Brief me" }, persona: "Be short." });
+    await stub.ingest("chat", `TOOL:configure_bot:${args}`);
+    await waitRow(stub, "assistant", "TOOL RESULT: Target: ");
+    const cfg = await target.stub.getConfig();
+    expect(cfg.persona).toBe("Be short.");
+    expect(cfg.schedules).toHaveLength(1);
+    expect((await target.stub.debugContext()).alarms).toBe(1);
+    // The change shows in the thread of the target bot, with an Undo card.
+    const cards = (await allRows(target.stub)).filter((r) => r.meta?.change);
+    expect(cards.length).toBeGreaterThanOrEqual(2);
+
+    await stub.ingest("chat", 'TOOL:configure_self:{"name":"x"}');
+    await until(async () => (await allRows(stub)).some((r) => r.role === "tool" && r.text.includes("configure_self") && r.text.includes("error")));
   });
 
   it("does not let Builder delete itself", async () => {

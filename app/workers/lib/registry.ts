@@ -46,9 +46,19 @@ export async function deleteBotRows(env: AppEnv, id: string): Promise<void> {
   ]);
 }
 
+/** One line of plain text for the bot list: no markdown marks. */
+export function plainPreview(text: string): string {
+  return text
+    .replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/g, "$1")
+    .replace(/[*_`#>]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 160);
+}
+
 export async function touchBot(env: AppEnv, id: string, text: string, unreadDelta: number): Promise<void> {
   await env.DB.prepare(`UPDATE bots SET last_text = ?2, last_at = ?3, unread = unread + ?4 WHERE id = ?1`)
-    .bind(id, text.slice(0, 160), Date.now(), unreadDelta)
+    .bind(id, plainPreview(text), Date.now(), unreadDelta)
     .run();
 }
 

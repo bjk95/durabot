@@ -184,7 +184,7 @@ function SettingsTab({ data, error }: { data: Route.ComponentProps["loaderData"]
             <span className="min-w-0">
               <span className="block truncate">{s.text}</span>
               <span className="block truncate text-xs text-muted">
-                <code>{s.cron}</code> · {s.prompt}
+                <code>{s.at ? `once at ${new Date(s.at).toLocaleString()}` : s.cron}</code> · {s.prompt}
               </span>
             </span>
             <Button variant="outline" disabled={busy}>
