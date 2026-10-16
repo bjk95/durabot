@@ -66,6 +66,12 @@ Versions: `agents` 0.28.1, `@earendil-works/pi-durable` 1.3.0, `@earendil-works/
 - **Caveat:** requests to the object (`/dump`) came in after the restart. A request also wakes the object. The test did not prove that the lifecycle alarm alone wakes it. Test this again after the first deploy, with no requests.
 - The first test script reported success too early, because it matched a word in the prompt text. The result above comes from the transcript.
 
+## AI Gateway attempt (D12, option 2)
+
+- The subdomain `durabot.workers.dev` is registered through the API.
+- The `wrangler login` token has no AI Gateway permission. `POST /ai-gateway/gateways` gives "Authentication error". A request to `gateway.ai.cloudflare.com/.../durabot/openrouter` gives HTTP 401, with the same result for a gateway name that does not exist. The gateway is not created on first use.
+- Next: create the gateway `durabot` in the dashboard (AI, AI Gateway, Create Gateway). Then repeat the request. If the gateway has authentication on, an API token with "AI Gateway: Run" is also needed (header `cf-aig-authorization`).
+
 ## Other facts
 
 - A free model takes 20 to 100 seconds for one call. Free models also have daily request limits. Use a paid model for UI work.
@@ -78,4 +84,4 @@ Versions: `agents` 0.28.1, `@earendil-works/pi-durable` 1.3.0, `@earendil-works/
 2. Step 5: Register four Composio meta tools. Leave out the remote bash and workbench tools.
 3. Step 5: Mark `COMPOSIO_SEARCH_TOOLS` and `COMPOSIO_GET_TOOL_SCHEMAS` as `replay: "safe"`. Mark the other two as `"unsafe"`.
 4. Step 7: Test eviction recovery on the deployed Worker with no requests during the run.
-5. Step 1: Register a workers.dev subdomain for the account.
+5. Step 1: The workers.dev subdomain `durabot` is registered (done).
